@@ -805,9 +805,15 @@ function setupPWAPrompt() {
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
-    // 显示提示
     if (els.pwaHint) {
       els.pwaHint.classList.remove('hidden');
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredPrompt = null;
+    if (els.pwaHint) {
+      els.pwaHint.classList.add('hidden');
     }
   });
 }
@@ -930,6 +936,8 @@ function bindEvents() {
   // 成功页-继续发送
   els.btnSendMore.addEventListener('click', () => switchView('pack'));
 }
+
+
 
 // ===== 初始化 =====
 

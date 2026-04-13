@@ -86,6 +86,7 @@ const els = {
   successCount: $('#success-count'),
   successRecipient: $('#success-recipient'),
   btnSendMore: $('#btn-send-more'),
+  btnViewDetail: $('#btn-view-detail'),
 
   // Toast
   successToast: $('#success-toast'),
@@ -1060,9 +1061,13 @@ function bindEvents() {
 
   // 成功页-继续发送
   els.btnSendMore.addEventListener('click', () => switchView('pack'));
+
+  // 成功页-查看详情（跳转到历史记录页）
+  els.btnViewDetail.addEventListener('click', () => {
+    switchView('gallery');
+    renderHistoryList();
+  });
 }
-
-
 
 // ===== 初始化 =====
 

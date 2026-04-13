@@ -12,10 +12,10 @@
  * }
  */
 
-const archiver = require('archiver');
-const nodemailer = require('nodemailer');
+import archiver from 'archiver';
+import nodemailer from 'nodemailer';
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // 仅接受 POST
   if (req.method !== 'POST') {
     return res.status(405).json({ success: false, error: '仅支持 POST 请求' });
@@ -112,4 +112,4 @@ module.exports = async (req, res) => {
 
     return res.status(500).json({ success: false, error: errorMessage });
   }
-};
+}

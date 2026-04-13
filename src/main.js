@@ -648,12 +648,17 @@ function updateSendButton(loading) {
 }
 
 /** 显示成功视图 */
-function showSuccessView() {
+async function showSuccessView() {
   showToast();
 
   // 只统计实际发送的图片（排除已发送的）
   const sentImages = state.images.filter((img) => !img.alreadySent);
   const totalSize = sentImages.reduce((sum, img) => sum + img.compressedSize, 0);
+
+  // 生成缩略图（40×40px，每张约 1-2KB）
+  const thumbnails = await Promise.all(
+    sentImages.map((img) => generateThumbnail(img.compressedData))
+  );
 
   addHistoryRecord({
     subject: els.inputSubject.value.trim(),
@@ -662,6 +667,7 @@ function showSuccessView() {
     imageCount: sentImages.length,
     totalSize: totalSize,
     timestamp: Date.now(),
+    thumbnails: thumbnails.filter(Boolean),
   });
 
   // 记录所有图片指纹（包含新发送的）
@@ -731,7 +737,8 @@ function showToast() {
 // ===== 发送历史管理 =====
 
 const HISTORY_KEY = 'image-mailer-history';
-const MAX_HISTORY = 50;
+const MAX_HISTORY = 30;
+const THUMB_SIZE = 40; // 缩略图像素尺寸
 
 
 
@@ -745,9 +752,50 @@ function loadHistory() {
   }
 }
 
-/** 保存历史记录到 localStorage */
+/** 保存历史记录到 localStorage（带自动清理） */
 function saveHistory() {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError' || e.code === 22) {
+      // 第一轮：删除最旧 10 条的缩略图
+      for (let i = Math.max(0, state.history.length - 10); i < state.history.length; i++) {
+        if (state.history[i]) delete state.history[i].thumbnails;
+      }
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+        return;
+      } catch (_) { /* 继续下一轮 */ }
+      // 第二轮：删除最旧 10 条记录
+      state.history = state.history.slice(0, Math.max(state.history.length - 10, 5));
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+      } catch (_) {
+        console.warn('历史记录存储失败，已放弃');
+      }
+    }
+  }
+}
+
+/** 生成图片缩略图（超小 dataURL） */
+function generateThumbnail(dataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = THUMB_SIZE;
+      canvas.height = THUMB_SIZE;
+      const ctx = canvas.getContext('2d');
+      // 居中裁剪
+      const size = Math.min(img.width, img.height);
+      const sx = (img.width - size) / 2;
+      const sy = (img.height - size) / 2;
+      ctx.drawImage(img, sx, sy, size, size, 0, 0, THUMB_SIZE, THUMB_SIZE);
+      resolve(canvas.toDataURL('image/jpeg', 0.5));
+    };
+    img.onerror = () => resolve(null);
+    img.src = dataUrl;
+  });
 }
 
 /** 添加一条发送记录 */
@@ -776,7 +824,7 @@ function clearAllHistory() {
   renderHistoryList();
 }
 
-/** 渲染历史列表 */
+/** 渲染历史列表（支持展开详情 + 缩略图） */
 function renderHistoryList() {
   const list = els.historyList;
   const empty = els.historyEmpty;
@@ -797,37 +845,71 @@ function renderHistoryList() {
     const date = new Date(record.timestamp);
     const dateStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 
+    // 缩略图 HTML
+    let thumbsHtml = '';
+    if (record.thumbnails && record.thumbnails.length > 0) {
+      thumbsHtml = `<div class="flex flex-wrap gap-1 mt-3">
+        ${record.thumbnails.map(t => t ? `<img src="${t}" class="w-10 h-10 rounded object-cover" />` : '').join('')}
+      </div>`;
+    }
+
+    // 邮件正文预览
+    const bodyPreview = record.body ? `<p class="text-xs text-on-surface-variant mt-2 whitespace-pre-line">${escapeHtml(record.body)}</p>` : '';
+
     const card = document.createElement('div');
-    card.className = 'bg-white rounded-2xl p-4 shadow-sm border border-emerald-100/50 transition-all hover:shadow-md';
+    card.className = 'bg-white rounded-2xl shadow-sm border border-emerald-100/50 transition-all hover:shadow-md overflow-hidden';
     card.innerHTML = `
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <h4 class="font-bold text-on-surface text-sm truncate">${escapeHtml(record.subject || '无主题')}</h4>
-          <p class="text-xs text-on-surface-variant mt-1 truncate">收件人：${escapeHtml(record.recipient)}</p>
-          <div class="flex items-center gap-3 mt-2 text-[11px] text-outline">
-            <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-xs">image</span>
-              ${record.imageCount} 张
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-xs">folder_zip</span>
-              ${formatSize(record.totalSize)}
-            </span>
-            <span class="flex items-center gap-1">
-              <span class="material-symbols-outlined text-xs">schedule</span>
-              ${dateStr}
-            </span>
+      <div class="p-4 cursor-pointer" data-toggle-detail="${index}">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <h4 class="font-bold text-on-surface text-sm truncate">${escapeHtml(record.subject || '无主题')}</h4>
+            <p class="text-xs text-on-surface-variant mt-1 truncate">收件人：${escapeHtml(record.recipient)}</p>
+            <div class="flex items-center gap-3 mt-2 text-[11px] text-outline">
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-xs">image</span>
+                ${record.imageCount} 张
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-xs">folder_zip</span>
+                ${formatSize(record.totalSize)}
+              </span>
+              <span class="flex items-center gap-1">
+                <span class="material-symbols-outlined text-xs">schedule</span>
+                ${dateStr}
+              </span>
+            </div>
+          </div>
+          <div class="flex items-center gap-1 flex-shrink-0">
+            <span class="material-symbols-outlined text-sm text-outline transition-transform" data-chevron="${index}">expand_more</span>
+            <button data-history-index="${index}"
+              class="btn-delete-history w-8 h-8 flex items-center justify-center text-outline hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              title="删除记录">
+              <span class="material-symbols-outlined text-lg">delete</span>
+            </button>
           </div>
         </div>
-        <button data-history-index="${index}"
-          class="btn-delete-history flex-shrink-0 w-8 h-8 flex items-center justify-center text-outline hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-          title="删除记录">
-          <span class="material-symbols-outlined text-lg">delete</span>
-        </button>
+      </div>
+      <div class="hidden px-4 pb-4 border-t border-emerald-50" data-detail="${index}">
+        ${bodyPreview}
+        ${thumbsHtml}
       </div>
     `;
 
     list.appendChild(card);
+  });
+
+  // 事件委托：点击展开/收起详情
+  list.querySelectorAll('[data-toggle-detail]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-delete-history')) return; // 不拦截删除按钮
+      const idx = el.dataset.toggleDetail;
+      const detail = list.querySelector(`[data-detail="${idx}"]`);
+      const chevron = list.querySelector(`[data-chevron="${idx}"]`);
+      if (detail) {
+        detail.classList.toggle('hidden');
+        if (chevron) chevron.style.transform = detail.classList.contains('hidden') ? '' : 'rotate(180deg)';
+      }
+    });
   });
 }
 

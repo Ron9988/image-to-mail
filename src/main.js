@@ -70,7 +70,9 @@ const els = {
   // 设置增强
   btnTogglePassword: $('#btn-toggle-password'),
   btnClearSettings: $('#btn-clear-settings'),
-  btnSaveDefaults: $('#btn-save-defaults'),
+  chkDefaultSubject: $('#chk-default-subject'),
+  chkDefaultBody: $('#chk-default-body'),
+  btnClearSent: $('#btn-clear-sent'),
 
   // 发送按钮
   sendBar: $('#send-bar'),
@@ -208,12 +210,20 @@ function updateProviderUI() {
   els.authHelpContent.innerHTML = AUTH_HELP[provider] || '';
 }
 
-/** 保存默认主题/正文 */
-function saveDefaults() {
-  state.defaults.subject = els.inputSubject.value.trim();
-  state.defaults.body = els.inputBody.value.trim();
-  localStorage.setItem('image-mailer-defaults', JSON.stringify(state.defaults));
-  showToastMessage('已保存为默认内容');
+/** 根据复选框状态保存默认内容（发送成功时调用） */
+function saveDefaultsIfChecked() {
+  let saved = false;
+  if (els.chkDefaultSubject.checked) {
+    state.defaults.subject = els.inputSubject.value.trim();
+    saved = true;
+  }
+  if (els.chkDefaultBody.checked) {
+    state.defaults.body = els.inputBody.value.trim();
+    saved = true;
+  }
+  if (saved) {
+    localStorage.setItem('image-mailer-defaults', JSON.stringify(state.defaults));
+  }
 }
 
 /** 生成带日期时间的默认正文 */
@@ -406,9 +416,13 @@ async function handleImageSelect(event) {
 
   // 提示信息
   const totalSelected = sortedFiles.length;
+  const sentCount = state.images.filter((img) => img.alreadySent).length;
   if (addedCount < totalSelected) {
     const skipped = totalSelected - addedCount;
     showError(`已添加 ${addedCount} 张，跳过 ${skipped} 张（最多 ${MAX_IMAGES} 张）`);
+  }
+  if (sentCount > 0) {
+    showError(`检测到 ${sentCount} 张图片已发送过，发送时将自动跳过。可点击“清除已发送”移除它们。`);
   }
 
   // 清空 input 以允许重复选择相同文件
@@ -433,6 +447,15 @@ function clearAllImages() {
   updatePreviewUI();
 }
 
+/** 清除已发送的图片（保留未发送的） */
+function clearSentImages() {
+  const sentImages = state.images.filter((img) => img.alreadySent);
+  sentImages.forEach((img) => URL.revokeObjectURL(img.preview));
+  state.images = state.images.filter((img) => !img.alreadySent);
+  updatePreviewUI();
+  showToastMessage(`已清除 ${sentImages.length} 张已发送图片`);
+}
+
 /** 更新预览区 UI */
 function updatePreviewUI() {
   const count = state.images.length;
@@ -443,12 +466,21 @@ function updatePreviewUI() {
   els.emailSection.classList.toggle('hidden', !hasImages);
   els.sendBar.classList.toggle('hidden', !hasImages || state.currentView !== 'pack');
 
-  // 更新计数
-  els.previewCount.textContent = `已选择 ${count} 张图片（上限 ${MAX_IMAGES} 张）`;
-  els.previewBadge.textContent = `${count} 张图片`;
+  // 统计已发送和未发送数量
+  const sentCount = state.images.filter((img) => img.alreadySent).length;
+  const newCount = count - sentCount;
 
-  // 计算总大小
-  const totalSize = state.images.reduce((sum, img) => sum + img.compressedSize, 0);
+  // 更新计数
+  els.previewCount.textContent = sentCount > 0
+    ? `已选 ${count} 张（${newCount} 张未发送，${sentCount} 张已发送）`
+    : `已选择 ${count} 张图片（上限 ${MAX_IMAGES} 张）`;
+  els.previewBadge.textContent = `${newCount} 张图片`;
+
+  // 显示/隐藏清除已发送按钮
+  els.btnClearSent.classList.toggle('hidden', sentCount === 0);
+
+  // 计算总大小（只计算未发送的）
+  const totalSize = state.images.filter((img) => !img.alreadySent).reduce((sum, img) => sum + img.compressedSize, 0);
   els.sizeInfo.textContent = `预计压缩后大小：${formatSize(totalSize)}`;
 
   // 更新默认邮件主题
@@ -528,6 +560,14 @@ async function sendImages() {
     showError('请至少选择一张图片');
     return;
   }
+
+  // 过滤已发送图片（严格去重）
+  const imagesToSend = state.images.filter((img) => !img.alreadySent);
+  if (imagesToSend.length === 0) {
+    showError('所有图片都已发送过，请清除已发送图片后重新选择');
+    return;
+  }
+
   const subject = els.inputSubject.value.trim();
   if (!subject) {
     showError('请填写邮件主题');
@@ -535,8 +575,8 @@ async function sendImages() {
     return;
   }
 
-  // 发送前检查总大小
-  const totalSize = state.images.reduce((sum, img) => sum + img.compressedSize, 0);
+  // 发送前检查总大小（只计算未发送的）
+  const totalSize = imagesToSend.reduce((sum, img) => sum + img.compressedSize, 0);
   if (totalSize > MAX_PAYLOAD_BYTES) {
     showError(`图片总大小 ${formatSize(totalSize)} 超过 4MB 限制，请减少图片数量后重试`);
     return;
@@ -547,7 +587,6 @@ async function sendImages() {
   updateSendButton(true);
 
   try {
-    // 使用 FormData 发送二进制图片（避免 Base64 膨胀，解决 Safari 请求体限制）
     const emailBody = els.inputBody.value.trim() || generateDefaultBody();
     const formData = new FormData();
     formData.append('provider', state.settings.provider || 'gmail');
@@ -557,8 +596,8 @@ async function sendImages() {
     formData.append('subject', subject);
     formData.append('body', emailBody);
 
-    // 将每张图片的 dataURL 转为 Blob 再添加
-    for (const img of state.images) {
+    // 只打包未发送的图片
+    for (const img of imagesToSend) {
       const resp = await fetch(img.compressedData);
       const blob = await resp.blob();
       formData.append('images', blob, img.name);
@@ -610,21 +649,22 @@ function updateSendButton(loading) {
 
 /** 显示成功视图 */
 function showSuccessView() {
-  // 显示 Toast
   showToast();
 
-  // 保存发送历史记录
-  const totalSize = state.images.reduce((sum, img) => sum + img.compressedSize, 0);
+  // 只统计实际发送的图片（排除已发送的）
+  const sentImages = state.images.filter((img) => !img.alreadySent);
+  const totalSize = sentImages.reduce((sum, img) => sum + img.compressedSize, 0);
+
   addHistoryRecord({
     subject: els.inputSubject.value.trim(),
     body: els.inputBody.value.trim(),
     recipient: state.settings.recipientEmail,
-    imageCount: state.images.length,
+    imageCount: sentImages.length,
     totalSize: totalSize,
     timestamp: Date.now(),
   });
 
-  // 记录已发送图片指纹（必须在 clearAllImages 之前）
+  // 记录所有图片指纹（包含新发送的）
   state.images.forEach((img) => {
     if (img.fingerprint) {
       state.sentFingerprints.add(img.fingerprint);
@@ -632,15 +672,18 @@ function showSuccessView() {
   });
   saveSentFingerprints();
 
+  // 根据复选框保存默认内容
+  saveDefaultsIfChecked();
+
   // 填充成功页面数据
-  els.successDesc.textContent = `您的 ${state.images.length} 张图片已压缩并成功发送至预设邮箱。请查收。`;
+  els.successDesc.textContent = `您的 ${sentImages.length} 张图片已压缩并成功发送至预设邮箱。请查收。`;
   els.successSize.textContent = formatSize(totalSize);
-  els.successCount.textContent = `${state.images.length} Pcs`;
+  els.successCount.textContent = `${sentImages.length} Pcs`;
   els.successRecipient.textContent = state.settings.recipientEmail;
 
-  // 清空已选图片
   clearAllImages();
   els.inputSubject.dataset.autoFilled = 'true';
+  els.inputBody.dataset.userEdited = '';
 
   switchView('success');
 }
@@ -895,8 +938,8 @@ function bindEvents() {
     els.authHelpPanel.classList.toggle('hidden');
   });
 
-  // 存为默认按钮
-  els.btnSaveDefaults.addEventListener('click', saveDefaults);
+  // 清除已发送图片
+  els.btnClearSent.addEventListener('click', clearSentImages);
 
   // 发送历史 - 单条删除（事件委托）
   els.historyList.addEventListener('click', (e) => {

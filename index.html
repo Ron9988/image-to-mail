@@ -190,7 +190,10 @@
           <span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
           <span id="preview-count" class="text-sm font-bold text-on-surface">已选择 0 张图片</span>
         </div>
-        <button id="btn-clear-all" class="text-xs font-bold text-primary uppercase tracking-widest hover:opacity-70 transition-opacity">清除全部</button>
+        <div class="flex items-center gap-3">
+          <button id="btn-clear-sent" class="hidden text-xs font-bold text-amber-600 uppercase tracking-widest hover:opacity-70 transition-opacity">清除已发送</button>
+          <button id="btn-clear-all" class="text-xs font-bold text-primary uppercase tracking-widest hover:opacity-70 transition-opacity">清除全部</button>
+        </div>
       </div>
       <!-- 图片网格 -->
       <div id="preview-grid" class="preview-grid"></div>
@@ -217,6 +220,11 @@
             <label class="block text-xs font-bold text-emerald-700 uppercase tracking-widest mb-2 ml-1" for="input-subject">邮件主题 (必填)</label>
             <input id="input-subject" type="text" placeholder="例如：2024年第10周设计素材..."
               class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50" />
+            <label class="flex items-center gap-2 mt-2 ml-1 cursor-pointer select-none">
+              <input id="chk-default-subject" type="checkbox" checked
+                class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/40 cursor-pointer" />
+              <span class="text-sm font-semibold text-on-surface-variant">保存为默认主题</span>
+            </label>
           </div>
 
           <!-- 邮件正文 -->
@@ -224,14 +232,12 @@
             <label class="block text-xs font-bold text-emerald-700 uppercase tracking-widest mb-2 ml-1" for="input-body">邮件正文</label>
             <textarea id="input-body" rows="3" placeholder="输入邮件正文内容..."
               class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50 resize-none">请查收附件中的图片。</textarea>
+            <label class="flex items-center gap-2 mt-2 ml-1 cursor-pointer select-none">
+              <input id="chk-default-body" type="checkbox"
+                class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary/40 cursor-pointer" />
+              <span class="text-sm font-semibold text-on-surface-variant">保存为默认正文</span>
+            </label>
           </div>
-
-          <!-- 存为默认 -->
-          <button id="btn-save-defaults" type="button"
-            class="flex items-center gap-1 text-[11px] text-primary/70 font-medium hover:text-primary transition-colors ml-1">
-            <span class="material-symbols-outlined text-sm">bookmark_add</span>
-            将当前主题和正文存为默认内容
-          </button>
 
           <!-- 发送预览 -->
           <div class="bg-surface-container-low/50 rounded-2xl p-4 border border-dashed border-outline-variant/40">

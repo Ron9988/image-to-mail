@@ -370,27 +370,36 @@ async function sendImages() {
   updateSendButton(true);
 
   try {
-    // 构建请求数据
-    const body = els.inputBody.value.trim() || '请查收附件中的图片。';
-    const payload = {
-      senderEmail: state.settings.senderEmail,
-      appPassword: state.settings.appPassword,
-      recipientEmail: state.settings.recipientEmail,
-      subject: subject,
-      body: body,
-      images: state.images.map((img) => ({
-        name: img.name,
-        data: img.compressedData,
-      })),
-    };
+    // 使用 FormData 发送二进制图片（避免 Base64 膨胀，解决 Safari 请求体限制）
+    const emailBody = els.inputBody.value.trim() || '请查收附件中的图片。';
+    const formData = new FormData();
+    formData.append('senderEmail', state.settings.senderEmail);
+    formData.append('appPassword', state.settings.appPassword);
+    formData.append('recipientEmail', state.settings.recipientEmail);
+    formData.append('subject', subject);
+    formData.append('body', emailBody);
+
+    // 将每张图片的 dataURL 转为 Blob 再添加
+    for (const img of state.images) {
+      const resp = await fetch(img.compressedData);
+      const blob = await resp.blob();
+      formData.append('images', blob, img.name);
+    }
 
     const response = await fetch('/api/send', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: formData,
     });
 
-    const result = await response.json();
+    // 安全解析响应（处理非 JSON 情况）
+    let result;
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      result = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(text || `服务器返回错误 (${response.status})`);
+    }
 
     if (!response.ok || !result.success) {
       throw new Error(result.error || '发送失败，请重试');

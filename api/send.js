@@ -1,19 +1,66 @@
 /**
  * Vercel Serverless Function - 图片打包并通过 Gmail 发送
- * POST /api/send
+ * POST /api/send (multipart/form-data)
  *
- * 请求体：
- * {
- *   senderEmail: string,       // 发件人 Gmail
- *   appPassword: string,       // 16位应用授权码
- *   recipientEmail: string,    // 收件人邮箱
- *   subject: string,           // 邮件主题
- *   images: [{ name: string, data: string }]  // Base64 图片数组
- * }
+ * FormData 字段：
+ *   senderEmail: string       - 发件人 Gmail
+ *   appPassword: string       - 16位应用授权码
+ *   recipientEmail: string    - 收件人邮箱
+ *   subject: string           - 邮件主题
+ *   body: string              - 邮件正文
+ *   images: File[]            - 图片文件（多个）
  */
 
 import archiver from 'archiver';
 import nodemailer from 'nodemailer';
+import { Writable } from 'stream';
+import Busboy from 'busboy';
+
+/**
+ * 解析 multipart/form-data 请求
+ * 返回 { fields: {}, files: [{ fieldname, filename, buffer, mimetype }] }
+ */
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const fields = {};
+    const files = [];
+
+    const busboy = Busboy({
+      headers: req.headers,
+      limits: { fileSize: 10 * 1024 * 1024 }, // 单文件 10MB 上限
+    });
+
+    busboy.on('field', (name, val) => {
+      fields[name] = val;
+    });
+
+    busboy.on('file', (name, stream, info) => {
+      const { filename, mimeType } = info;
+      const chunks = [];
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('end', () => {
+        files.push({
+          fieldname: name,
+          filename: filename || `image_${files.length + 1}.jpg`,
+          buffer: Buffer.concat(chunks),
+          mimetype: mimeType,
+        });
+      });
+    });
+
+    busboy.on('finish', () => resolve({ fields, files }));
+    busboy.on('error', (err) => reject(err));
+
+    req.pipe(busboy);
+  });
+}
+
+// 关闭 Vercel 默认的 body 解析，让我们用 busboy 处理原始流
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 export default async function handler(req, res) {
   // 仅接受 POST
@@ -22,7 +69,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { senderEmail, appPassword, recipientEmail, subject, body, images } = req.body;
+    // 解析 multipart/form-data
+    const { fields, files } = await parseMultipart(req);
+    const { senderEmail, appPassword, recipientEmail, subject, body } = fields;
+    const images = files.filter((f) => f.fieldname === 'images');
 
     // ===== 输入校验 =====
     if (!senderEmail || !appPassword || !recipientEmail) {
@@ -31,7 +81,7 @@ export default async function handler(req, res) {
     if (!subject || !subject.trim()) {
       return res.status(400).json({ success: false, error: '请填写邮件主题' });
     }
-    if (!images || !Array.isArray(images) || images.length === 0) {
+    if (images.length === 0) {
       return res.status(400).json({ success: false, error: '请至少选择一张图片' });
     }
 
@@ -41,7 +91,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ success: false, error: '邮箱格式无效' });
     }
 
-    // 邮件正文（使用前端传来的内容，或默认值）
+    // 邮件正文
     const emailBody = (body && body.trim()) || '请查收附件中的图片。';
 
     // ===== 使用 archiver 在内存中打包 ZIP =====
@@ -53,15 +103,9 @@ export default async function handler(req, res) {
       archive.on('end', () => resolve(Buffer.concat(buffers)));
       archive.on('error', (err) => reject(err));
 
-      // 将 Base64 图片逐一添加到 ZIP
-      images.forEach((img, index) => {
-        // 从 data URL 中提取纯 Base64 数据
-        const base64Data = img.data.includes(',')
-          ? img.data.split(',')[1]
-          : img.data;
-        const buffer = Buffer.from(base64Data, 'base64');
-        const filename = img.name || `image_${index + 1}.jpg`;
-        archive.append(buffer, { name: filename });
+      // 直接添加二进制 buffer（无需 Base64 解码）
+      images.forEach((img) => {
+        archive.append(img.buffer, { name: img.filename });
       });
 
       archive.finalize();

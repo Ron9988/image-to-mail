@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#006c49" />
+  <meta name="description" content="微信图片一键打包发送到邮箱" />
+  <title>图片打包助手</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+  <!-- 字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+</head>
+
+<body class="bg-surface text-on-surface font-body min-h-screen pb-24 selection:bg-primary-container/30">
+
+  <!-- ==================== 成功 Toast ==================== -->
+  <div id="success-toast" class="fixed top-16 left-0 w-full z-[60] px-4 pt-4 hidden">
+    <div class="max-w-md mx-auto bg-primary-container text-on-primary-container py-3 px-5 rounded-xl shadow-lg flex items-center gap-3">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+      <span class="font-medium text-sm">发送成功！邮件已发出。</span>
+    </div>
+  </div>
+
+  <!-- ==================== 顶部导航栏 ==================== -->
+  <header class="fixed top-0 w-full z-50 glass-header shadow-sm flex justify-between items-center px-6 h-16">
+    <div class="flex items-center gap-3">
+      <span class="material-symbols-outlined text-emerald-600">grid_view</span>
+      <h1 class="text-xl font-extrabold text-zinc-900 font-headline tracking-tight">图片打包助手</h1>
+    </div>
+    <button id="btn-header-settings" class="w-10 h-10 flex items-center justify-center text-zinc-500 hover:bg-zinc-100 rounded-full transition-colors active:scale-95">
+      <span class="material-symbols-outlined">settings</span>
+    </button>
+  </header>
+
+  <!-- ==================== 视图：设置 (状态 A) ==================== -->
+  <main id="view-settings" class="view-section pt-24 px-6 max-w-lg mx-auto">
+    <!-- 头部 -->
+    <header class="mb-10 text-center md:text-left">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-emerald-50 text-primary mb-6">
+        <span class="material-symbols-outlined text-4xl">rocket_launch</span>
+      </div>
+      <h2 class="font-headline text-3xl font-extrabold tracking-tight text-on-surface mb-2">图片打包助手</h2>
+      <p class="text-on-surface-variant text-sm font-medium">只需一次配置，即可一键发送</p>
+    </header>
+
+    <!-- 配置表单 -->
+    <section class="bg-surface-container-lowest rounded-xl p-8 shadow-[0_12px_32px_-4px_rgba(25,28,29,0.06)] border border-outline-variant/10">
+      <div class="flex items-center gap-2 mb-8">
+        <span class="material-symbols-outlined text-primary">settings_suggest</span>
+        <h3 class="font-headline text-lg font-bold">您的发件设置</h3>
+      </div>
+
+      <form id="settings-form" class="space-y-6" autocomplete="off">
+        <!-- Gmail 地址 -->
+        <div class="space-y-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-sender">您的 Gmail 地址</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">mail</span>
+            <input id="input-sender" type="email" placeholder="name@gmail.com"
+              class="w-full pl-12 pr-4 py-3.5 bg-surface-container-high border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface text-sm" />
+          </div>
+        </div>
+
+        <!-- 应用授权码 -->
+        <div class="space-y-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-password">Gmail 16位应用授权码</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">key</span>
+            <input id="input-password" type="password" placeholder="abcd efgh ijkl mnop"
+              class="w-full pl-12 pr-4 py-3.5 bg-surface-container-high border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface text-sm" />
+          </div>
+          <p class="text-[11px] text-primary/80 font-medium px-1 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[14px]">info</span>
+            (非登录密码，在 Google 账号安全性中生成)
+          </p>
+        </div>
+
+        <!-- 收件人邮箱 -->
+        <div class="space-y-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-recipient">收件人邮箱</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">business_center</span>
+            <input id="input-recipient" type="email" placeholder="office@company.com"
+              class="w-full pl-12 pr-4 py-3.5 bg-surface-container-high border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all placeholder:text-outline/60 text-on-surface text-sm" />
+          </div>
+        </div>
+
+        <!-- 保存按钮 -->
+        <button id="btn-save-settings" type="submit"
+          class="w-full mt-4 py-4 px-6 bg-gradient-to-r from-primary to-primary-container text-white font-bold rounded-xl shadow-lg shadow-primary/20 hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2">
+          <span>保存并开始使用</span>
+          <span class="material-symbols-outlined">arrow_forward</span>
+        </button>
+      </form>
+    </section>
+
+    <!-- 安全提示 -->
+    <div class="mt-12 p-6 rounded-xl bg-surface-container-low border border-outline-variant/20 flex gap-4 items-start">
+      <div class="p-2 bg-white rounded-lg shadow-sm flex-shrink-0">
+        <span class="material-symbols-outlined text-primary">shield_lock</span>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-on-surface mb-1">隐私安全保障</h4>
+        <p class="text-xs text-on-surface-variant leading-relaxed">您的配置信息仅存储在本地设备中，绝不会上传至第三方服务器。应用授权码让您无需提供主密码即可安全授权。</p>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 视图：打包 (状态 B) ==================== -->
+  <main id="view-pack" class="view-section pt-24 pb-48 px-4 max-w-2xl mx-auto min-h-screen">
+    <!-- 标题区 -->
+    <section class="mb-8">
+      <div class="flex items-end justify-between mb-4">
+        <div>
+          <h2 class="text-3xl font-headline font-extrabold text-on-surface tracking-tight">图片打包发送</h2>
+          <p class="text-on-surface-variant mt-1 font-medium">支持多选，自动打包为 ZIP 附件</p>
+        </div>
+        <div class="bg-primary-container/10 px-3 py-1 rounded-full">
+          <span class="text-[10px] font-bold text-primary uppercase tracking-widest">Workspace</span>
+        </div>
+      </div>
+
+      <!-- 上传区域 -->
+      <div id="upload-area" class="relative group cursor-pointer">
+        <div class="bg-surface-container-low border-2 border-dashed border-outline-variant/30 rounded-3xl p-8 transition-all hover:bg-surface-container hover:border-primary/40 flex flex-col items-center justify-center gap-4 pulse-border">
+          <div class="w-16 h-16 bg-white shadow-sm rounded-2xl flex items-center justify-center text-primary transition-transform group-active:scale-95">
+            <span class="material-symbols-outlined text-4xl">add</span>
+          </div>
+          <p class="font-semibold text-on-surface-variant">点击选择手机相册图片</p>
+          <p class="text-xs text-outline font-medium uppercase tracking-tighter">支持 JPG / PNG / HEIC 格式</p>
+        </div>
+        <input id="file-input" type="file" accept="image/*" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+      </div>
+    </section>
+
+    <!-- 图片预览区（动态填充） -->
+    <section id="preview-section" class="mb-8 space-y-4 hidden">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-emerald-600" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+          <span id="preview-count" class="text-sm font-bold text-on-surface">已选择 0 张图片</span>
+        </div>
+        <button id="btn-clear-all" class="text-xs font-bold text-primary uppercase tracking-widest hover:opacity-70 transition-opacity">清除全部</button>
+      </div>
+      <!-- 图片网格 -->
+      <div id="preview-grid" class="preview-grid"></div>
+      <!-- 大小信息 -->
+      <div class="flex items-center gap-2 text-xs text-on-surface-variant">
+        <span class="material-symbols-outlined text-sm">info</span>
+        <span id="size-info">预计压缩后大小：0 KB</span>
+      </div>
+    </section>
+
+    <!-- 邮件配置 -->
+    <section id="email-section" class="mb-12 hidden">
+      <div class="bg-white rounded-[2rem] p-6 shadow-sm border border-emerald-100/50">
+        <div class="flex items-center gap-2 mb-6">
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <span class="material-symbols-outlined text-emerald-600 text-lg">mail</span>
+          </div>
+          <h3 class="text-lg font-bold text-on-surface">邮件发送确认</h3>
+        </div>
+
+        <div class="space-y-4">
+          <!-- 邮件主题 -->
+          <div>
+            <label class="block text-xs font-bold text-emerald-700 uppercase tracking-widest mb-2 ml-1" for="input-subject">邮件主题 (必填)</label>
+            <input id="input-subject" type="text" placeholder="例如：2024年第10周设计素材..."
+              class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50" />
+          </div>
+
+          <!-- 发送预览 -->
+          <div class="bg-surface-container-low/50 rounded-2xl p-4 border border-dashed border-outline-variant/40">
+            <div class="space-y-3">
+              <div class="flex items-start gap-3">
+                <span class="text-[10px] font-bold text-outline uppercase w-10 mt-1 flex-shrink-0">收件人</span>
+                <p id="preview-recipient" class="text-sm font-semibold text-on-surface-variant flex-1 truncate">未配置</p>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="text-[10px] font-bold text-outline uppercase w-10 mt-1 flex-shrink-0">附件</span>
+                <div class="flex items-center gap-2 text-primary">
+                  <span class="material-symbols-outlined text-base">zip_box</span>
+                  <p class="text-sm font-bold">bundle.zip</p>
+                  <span id="preview-badge" class="text-[10px] bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">0 张图片</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 提示 -->
+    <footer id="pwa-hint" class="mt-8 text-center px-6 hidden">
+      <div class="bg-surface-container-low/50 rounded-2xl py-4 px-6 inline-flex items-center gap-3">
+        <span class="material-symbols-outlined text-primary">tips_and_updates</span>
+        <p class="text-sm text-on-surface-variant font-medium">建议保存此网页到桌面，方便下次使用</p>
+      </div>
+    </footer>
+  </main>
+
+  <!-- ==================== 视图：成功反馈 (状态 C) ==================== -->
+  <main id="view-success" class="view-section pt-24 px-6 max-w-5xl mx-auto">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <!-- 主信息卡片 -->
+      <div class="md:col-span-2 bg-surface-container-lowest p-8 rounded-[2rem] shadow-[0_12px_32px_-4px_rgba(25,28,29,0.04)] relative overflow-hidden flex flex-col justify-between min-h-[320px]">
+        <div class="relative z-10">
+          <span class="text-[10px] uppercase tracking-[0.2em] font-bold text-primary mb-4 block">Operation Success</span>
+          <h2 class="text-4xl font-headline font-extrabold tracking-tight text-on-surface mb-2">已成功打包</h2>
+          <p id="success-desc" class="text-on-surface-variant max-w-xs leading-relaxed">您的图片已压缩并成功发送至预设邮箱。请查收。</p>
+        </div>
+        <div class="flex gap-4 mt-8 relative z-10">
+          <button id="btn-send-more" class="bg-primary text-white px-8 py-4 rounded-xl font-semibold shadow-lg shadow-primary/20 active:scale-95 transition-all">
+            继续发送
+          </button>
+          <button id="btn-view-detail" class="bg-surface-container-high text-on-surface-variant px-8 py-4 rounded-xl font-semibold active:scale-95 transition-all">
+            查看详情
+          </button>
+        </div>
+        <!-- 装饰背景 -->
+        <div class="absolute top-0 right-0 w-1/2 h-full opacity-5 pointer-events-none">
+          <div class="w-full h-full bg-gradient-to-bl from-emerald-400 via-emerald-200 to-transparent rounded-[2rem]"></div>
+        </div>
+      </div>
+
+      <!-- 统计卡片 -->
+      <div class="bg-surface-container-low p-8 rounded-[2rem] flex flex-col justify-between border border-white/40">
+        <div>
+          <h3 class="text-lg font-bold mb-6">打包信息</h3>
+          <div class="space-y-4">
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-on-surface-variant">文件大小</span>
+              <span id="success-size" class="font-semibold">-- MB</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-on-surface-variant">图片数量</span>
+              <span id="success-count" class="font-semibold">-- Pcs</span>
+            </div>
+            <div class="flex justify-between items-center text-sm">
+              <span class="text-on-surface-variant">目标格式</span>
+              <span class="font-semibold">.ZIP</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-8 bg-surface-container-lowest p-4 rounded-2xl flex items-center gap-4">
+          <div class="w-10 h-10 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 flex-shrink-0">
+            <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">mail</span>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">Recipient</p>
+            <p id="success-recipient" class="text-sm font-semibold truncate">--</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 视图：展厅（占位） ==================== -->
+  <main id="view-gallery" class="view-section pt-24 px-6 max-w-lg mx-auto">
+    <div class="flex flex-col items-center justify-center min-h-[60vh] text-center">
+      <div class="w-20 h-20 rounded-2xl bg-surface-container-high flex items-center justify-center mb-6">
+        <span class="material-symbols-outlined text-5xl text-outline">gallery_thumbnail</span>
+      </div>
+      <h2 class="font-headline text-2xl font-extrabold text-on-surface mb-2">发送历史</h2>
+      <p class="text-on-surface-variant text-sm max-w-xs">此功能正在开发中，敬请期待。您之前的发送记录将在这里展示。</p>
+    </div>
+  </main>
+
+  <!-- ==================== 悬浮发送按钮 ==================== -->
+  <div id="send-bar" class="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-sm px-6 pointer-events-none z-40 hidden">
+    <button id="btn-send"
+      class="btn-glow pointer-events-auto w-full h-16 bg-gradient-to-r from-primary to-emerald-600 text-white rounded-full shadow-[0_12px_40px_-8px_rgba(0,108,73,0.4)] flex items-center justify-center gap-3 transition-transform active:scale-95 group disabled:opacity-50 disabled:cursor-not-allowed">
+      <span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform" id="send-icon">send</span>
+      <span id="send-text" class="text-lg font-bold tracking-tight">一键打包并发送</span>
+    </button>
+  </div>
+
+  <!-- ==================== 底部导航栏 ==================== -->
+  <nav class="fixed bottom-0 w-full z-50 glass-nav rounded-t-[2.5rem] shadow-[0_-8px_40px_rgba(0,0,0,0.06)] flex justify-around items-center h-20 px-4 pb-safe">
+    <button data-view="gallery" class="nav-tab flex flex-col items-center justify-center px-5 py-2 transition-all active:scale-90 duration-200 text-zinc-400">
+      <span class="material-symbols-outlined mb-1">gallery_thumbnail</span>
+      <span class="font-label text-[11px] font-semibold uppercase tracking-wider">展厅</span>
+    </button>
+    <button data-view="pack" class="nav-tab flex flex-col items-center justify-center px-5 py-2 transition-all active:scale-90 duration-200 text-zinc-400">
+      <span class="material-symbols-outlined mb-1">inventory_2</span>
+      <span class="font-label text-[11px] font-semibold uppercase tracking-wider">打包</span>
+    </button>
+    <button data-view="settings" class="nav-tab flex flex-col items-center justify-center px-5 py-2 transition-all active:scale-90 duration-200 text-zinc-400">
+      <span class="material-symbols-outlined mb-1">settings</span>
+      <span class="font-label text-[11px] font-semibold uppercase tracking-wider">设置</span>
+    </button>
+  </nav>
+
+  <!-- 入口脚本 -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

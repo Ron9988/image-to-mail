@@ -13,6 +13,7 @@ const state = {
     appPassword: '',
     recipientEmail: '',
   },
+  history: [],                // 发送历史记录
   isSending: false,           // 发送中状态
 };
 
@@ -53,6 +54,10 @@ const els = {
   previewBadge: $('#preview-badge'),
   previewBody: $('#preview-body'),
 
+  // 设置增强
+  btnTogglePassword: $('#btn-toggle-password'),
+  btnClearSettings: $('#btn-clear-settings'),
+
   // 发送按钮
   sendBar: $('#send-bar'),
   btnSend: $('#btn-send'),
@@ -74,6 +79,11 @@ const els = {
 
   // 底部导航
   navTabs: $$('.nav-tab'),
+
+  // 发送历史
+  historyList: $('#history-list'),
+  historyEmpty: $('#history-empty'),
+  btnClearHistory: $('#btn-clear-history'),
 };
 
 // ===== 设置管理 =====
@@ -105,6 +115,30 @@ function saveSettings() {
 /** 检查设置是否完整 */
 function isSettingsComplete() {
   return state.settings.senderEmail && state.settings.appPassword && state.settings.recipientEmail;
+}
+
+/** 清除所有设置 */
+function clearSettings() {
+  if (!confirm('确定清除所有设置？这将删除您保存的 Gmail 地址、授权码和收件人信息。')) return;
+  state.settings = { senderEmail: '', appPassword: '', recipientEmail: '' };
+  localStorage.removeItem('image-mailer-settings');
+  els.inputSender.value = '';
+  els.inputPassword.value = '';
+  els.inputRecipient.value = '';
+  showToastMessage('设置已清除');
+}
+
+/** 切换授权码明文/密文 */
+function togglePasswordVisibility() {
+  const input = els.inputPassword;
+  const icon = els.btnTogglePassword.querySelector('.material-symbols-outlined');
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.textContent = 'visibility_off';
+  } else {
+    input.type = 'password';
+    icon.textContent = 'visibility';
+  }
 }
 
 // ===== 视图切换 =====
@@ -150,6 +184,11 @@ function switchView(viewName) {
   // 更新打包视图中的邮件预览信息
   if (viewName === 'pack') {
     updateEmailPreview();
+  }
+
+  // 切换到历史视图时渲染历史列表
+  if (viewName === 'gallery') {
+    renderHistoryList();
   }
 }
 
@@ -387,8 +426,18 @@ function showSuccessView() {
   // 显示 Toast
   showToast();
 
-  // 填充成功页面数据
+  // 保存发送历史记录
   const totalSize = state.images.reduce((sum, img) => sum + img.compressedSize, 0);
+  addHistoryRecord({
+    subject: els.inputSubject.value.trim(),
+    body: els.inputBody.value.trim(),
+    recipient: state.settings.recipientEmail,
+    imageCount: state.images.length,
+    totalSize: totalSize,
+    timestamp: Date.now(),
+  });
+
+  // 填充成功页面数据
   els.successDesc.textContent = `您的 ${state.images.length} 张图片已压缩并成功发送至预设邮箱。请查收。`;
   els.successSize.textContent = formatSize(totalSize);
   els.successCount.textContent = `${state.images.length} Pcs`;
@@ -409,6 +458,26 @@ function showError(message) {
   alert(message);
 }
 
+/** 显示自定义消息 Toast */
+function showToastMessage(message) {
+  const toast = els.successToast;
+  const msgSpan = toast.querySelector('span:last-child');
+  const originalText = msgSpan.textContent;
+  msgSpan.textContent = message;
+  toast.classList.remove('hidden');
+  toast.firstElementChild.classList.remove('toast-exit');
+  toast.firstElementChild.classList.add('toast-enter');
+
+  setTimeout(() => {
+    toast.firstElementChild.classList.remove('toast-enter');
+    toast.firstElementChild.classList.add('toast-exit');
+    setTimeout(() => {
+      toast.classList.add('hidden');
+      msgSpan.textContent = originalText;
+    }, 300);
+  }, 2000);
+}
+
 /** 显示成功 Toast */
 function showToast() {
   const toast = els.successToast;
@@ -421,6 +490,107 @@ function showToast() {
     toast.firstElementChild.classList.add('toast-exit');
     setTimeout(() => toast.classList.add('hidden'), 300);
   }, 3000);
+}
+
+// ===== 发送历史管理 =====
+
+const HISTORY_KEY = 'image-mailer-history';
+const MAX_HISTORY = 50;
+
+/** 从 localStorage 加载历史记录 */
+function loadHistory() {
+  try {
+    const saved = localStorage.getItem(HISTORY_KEY);
+    state.history = saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    state.history = [];
+  }
+}
+
+/** 保存历史记录到 localStorage */
+function saveHistory() {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(state.history));
+}
+
+/** 添加一条发送记录 */
+function addHistoryRecord(record) {
+  state.history.unshift(record);
+  if (state.history.length > MAX_HISTORY) {
+    state.history = state.history.slice(0, MAX_HISTORY);
+  }
+  saveHistory();
+}
+
+/** 删除单条历史记录 */
+function removeHistoryRecord(index) {
+  if (index >= 0 && index < state.history.length) {
+    state.history.splice(index, 1);
+    saveHistory();
+    renderHistoryList();
+  }
+}
+
+/** 清除所有历史记录 */
+function clearAllHistory() {
+  if (!confirm('确定清除所有发送记录？此操作不可恢复。')) return;
+  state.history = [];
+  saveHistory();
+  renderHistoryList();
+}
+
+/** 渲染历史列表 */
+function renderHistoryList() {
+  const list = els.historyList;
+  const empty = els.historyEmpty;
+  const clearBtn = els.btnClearHistory;
+
+  list.innerHTML = '';
+
+  if (state.history.length === 0) {
+    empty.classList.remove('hidden');
+    clearBtn.classList.add('hidden');
+    return;
+  }
+
+  empty.classList.add('hidden');
+  clearBtn.classList.remove('hidden');
+
+  state.history.forEach((record, index) => {
+    const date = new Date(record.timestamp);
+    const dateStr = `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl p-4 shadow-sm border border-emerald-100/50 transition-all hover:shadow-md';
+    card.innerHTML = `
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex-1 min-w-0">
+          <h4 class="font-bold text-on-surface text-sm truncate">${escapeHtml(record.subject || '无主题')}</h4>
+          <p class="text-xs text-on-surface-variant mt-1 truncate">收件人：${escapeHtml(record.recipient)}</p>
+          <div class="flex items-center gap-3 mt-2 text-[11px] text-outline">
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">image</span>
+              ${record.imageCount} 张
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">folder_zip</span>
+              ${formatSize(record.totalSize)}
+            </span>
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">schedule</span>
+              ${dateStr}
+            </span>
+          </div>
+        </div>
+        <button data-history-index="${index}"
+          class="btn-delete-history flex-shrink-0 w-8 h-8 flex items-center justify-center text-outline hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+          title="删除记录">
+          <span class="material-symbols-outlined text-lg">delete</span>
+        </button>
+      </div>
+    `;
+
+    list.appendChild(card);
+  });
 }
 
 // ===== PWA 支持 =====
@@ -454,6 +624,13 @@ function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** HTML 转义防止 XSS */
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 // ===== 事件绑定 =====
@@ -503,6 +680,24 @@ function bindEvents() {
   // 清空全部图片
   els.btnClearAll.addEventListener('click', clearAllImages);
 
+  // 授权码明文切换
+  els.btnTogglePassword.addEventListener('click', togglePasswordVisibility);
+
+  // 一键清除设置
+  els.btnClearSettings.addEventListener('click', clearSettings);
+
+  // 发送历史 - 单条删除（事件委托）
+  els.historyList.addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn-delete-history');
+    if (btn) {
+      const index = parseInt(btn.dataset.historyIndex, 10);
+      removeHistoryRecord(index);
+    }
+  });
+
+  // 发送历史 - 清除全部
+  els.btnClearHistory.addEventListener('click', clearAllHistory);
+
   // 删除单张图片（事件委托）
   els.previewGrid.addEventListener('click', (e) => {
     const btn = e.target.closest('.btn-remove');
@@ -534,6 +729,9 @@ function bindEvents() {
 function init() {
   // 加载设置
   loadSettings();
+
+  // 加载发送历史
+  loadHistory();
 
   // 绑定事件
   bindEvents();

@@ -176,6 +176,13 @@
               class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50" />
           </div>
 
+          <!-- 邮件正文 -->
+          <div>
+            <label class="block text-xs font-bold text-emerald-700 uppercase tracking-widest mb-2 ml-1" for="input-body">邮件正文</label>
+            <textarea id="input-body" rows="3" placeholder="输入邮件正文内容..."
+              class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50 resize-none">请查收附件中的图片。</textarea>
+          </div>
+
           <!-- 发送预览 -->
           <div class="bg-surface-container-low/50 rounded-2xl p-4 border border-dashed border-outline-variant/40">
             <div class="space-y-3">
@@ -190,6 +197,10 @@
                   <p class="text-sm font-bold">bundle.zip</p>
                   <span id="preview-badge" class="text-[10px] bg-primary/10 px-1.5 py-0.5 rounded text-primary font-bold">0 张图片</span>
                 </div>
+              </div>
+              <div class="flex items-start gap-3">
+                <span class="text-[10px] font-bold text-outline uppercase w-10 mt-1 flex-shrink-0">正文</span>
+                <p id="preview-body" class="text-sm text-on-surface-variant flex-1">请查收附件中的图片。</p>
               </div>
             </div>
           </div>

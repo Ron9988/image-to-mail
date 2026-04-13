@@ -48,8 +48,10 @@ const els = {
   // 邮件配置
   emailSection: $('#email-section'),
   inputSubject: $('#input-subject'),
+  inputBody: $('#input-body'),
   previewRecipient: $('#preview-recipient'),
   previewBadge: $('#preview-badge'),
+  previewBody: $('#preview-body'),
 
   // 发送按钮
   sendBar: $('#send-bar'),
@@ -300,6 +302,7 @@ function renderPreviewGrid() {
 /** 更新邮件预览信息 */
 function updateEmailPreview() {
   els.previewRecipient.textContent = state.settings.recipientEmail || '未配置';
+  els.previewBody.textContent = els.inputBody.value || '请查收附件中的图片。';
 }
 
 // ===== 发送功能 =====
@@ -329,11 +332,13 @@ async function sendImages() {
 
   try {
     // 构建请求数据
+    const body = els.inputBody.value.trim() || '请查收附件中的图片。';
     const payload = {
       senderEmail: state.settings.senderEmail,
       appPassword: state.settings.appPassword,
       recipientEmail: state.settings.recipientEmail,
       subject: subject,
+      body: body,
       images: state.images.map((img) => ({
         name: img.name,
         data: img.compressedData,
@@ -510,6 +515,11 @@ function bindEvents() {
   // 邮件主题输入时取消自动填充标记
   els.inputSubject.addEventListener('input', () => {
     els.inputSubject.dataset.autoFilled = 'false';
+  });
+
+  // 邮件正文输入时同步预览
+  els.inputBody.addEventListener('input', () => {
+    els.previewBody.textContent = els.inputBody.value || '请查收附件中的图片。';
   });
 
   // 发送按钮

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { senderEmail, appPassword, recipientEmail, subject, images } = req.body;
+    const { senderEmail, appPassword, recipientEmail, subject, body, images } = req.body;
 
     // ===== 输入校验 =====
     if (!senderEmail || !appPassword || !recipientEmail) {
@@ -40,6 +40,9 @@ export default async function handler(req, res) {
     if (!emailRegex.test(senderEmail) || !emailRegex.test(recipientEmail)) {
       return res.status(400).json({ success: false, error: '邮箱格式无效' });
     }
+
+    // 邮件正文（使用前端传来的内容，或默认值）
+    const emailBody = (body && body.trim()) || '请查收附件中的图片。';
 
     // ===== 使用 archiver 在内存中打包 ZIP =====
     const zipBuffer = await new Promise((resolve, reject) => {
@@ -77,7 +80,7 @@ export default async function handler(req, res) {
       from: senderEmail,
       to: recipientEmail,
       subject: subject.trim(),
-      text: `请查收附件中的 ${images.length} 张图片。\n\n此邮件由「图片打包助手」自动发送。`,
+      text: emailBody,
       attachments: [
         {
           filename: 'bundle.zip',

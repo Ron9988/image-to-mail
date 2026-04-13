@@ -7,15 +7,17 @@ import './style.css';
 // ===== 全局状态 =====
 const state = {
   currentView: 'settings',   // 当前视图: settings | pack | gallery | success
-  images: [],                 // 已选图片 [{ file, name, preview, compressedData, compressedSize, fingerprint, lastModified }]
+  images: [],
   settings: {
+    provider: 'gmail',
     senderEmail: '',
     appPassword: '',
     recipientEmail: '',
   },
-  history: [],                // 发送历史记录
-  sentFingerprints: new Set(), // 已发送图片指纹集合
-  isSending: false,           // 发送中状态
+  defaults: { subject: '', body: '' }, // 用户保存的默认主题/正文
+  history: [],
+  sentFingerprints: new Set(),
+  isSending: false,
 };
 
 // 常量
@@ -39,9 +41,14 @@ const els = {
 
   // 设置表单
   settingsForm: $('#settings-form'),
+  inputProvider: $('#input-provider'),
   inputSender: $('#input-sender'),
   inputPassword: $('#input-password'),
   inputRecipient: $('#input-recipient'),
+  labelPassword: $('#label-password'),
+  btnAuthHelp: $('#btn-auth-help'),
+  authHelpPanel: $('#auth-help-panel'),
+  authHelpContent: $('#auth-help-content'),
 
   // 打包视图
   uploadArea: $('#upload-area'),
@@ -63,6 +70,7 @@ const els = {
   // 设置增强
   btnTogglePassword: $('#btn-toggle-password'),
   btnClearSettings: $('#btn-clear-settings'),
+  btnSaveDefaults: $('#btn-save-defaults'),
 
   // 发送按钮
   sendBar: $('#send-bar'),
@@ -92,6 +100,48 @@ const els = {
   btnClearHistory: $('#btn-clear-history'),
 };
 
+// ===== 邮箱服务商配置 =====
+
+const PROVIDERS = {
+  gmail:   { label: 'Gmail',            host: 'smtp.gmail.com',       port: 587, needsAppPassword: true,  placeholder: 'abcd efgh ijkl mnop' },
+  outlook: { label: 'Outlook / Hotmail', host: 'smtp.office365.com',   port: 587, needsAppPassword: false, placeholder: '您的登录密码' },
+  yahoo:   { label: 'Yahoo Mail',        host: 'smtp.mail.yahoo.com',  port: 587, needsAppPassword: true,  placeholder: '应用专用密码' },
+  icloud:  { label: 'iCloud Mail',       host: 'smtp.mail.me.com',     port: 587, needsAppPassword: true,  placeholder: '应用专用密码' },
+  zoho:    { label: 'Zoho Mail',         host: 'smtp.zoho.com',        port: 587, needsAppPassword: false, placeholder: '您的登录密码' },
+};
+
+const AUTH_HELP = {
+  gmail: `<p class="font-bold text-on-surface mb-1">📧 Gmail 授权码获取步骤：</p>
+<ol class="list-decimal pl-4 space-y-1">
+<li>打开 <a href="https://myaccount.google.com/security" target="_blank" class="text-primary underline">Google 账号安全性</a></li>
+<li>确保已开启<strong>“两步验证”</strong></li>
+<li>搜索“应用专用密码” → 点击生成</li>
+<li>应用名称填“图片打包助手” → 点击创建</li>
+<li>复制生成的 <strong>16 位密码</strong>粘贴到上方输入框</li>
+</ol>`,
+  outlook: `<p class="font-bold text-on-surface mb-1">📧 Outlook / Hotmail：</p>
+<p class="text-emerald-700 font-semibold">✅ 无需授权码！直接输入您的登录密码即可。</p>
+<p class="mt-1 text-on-surface-variant">如果开启了两步验证，请在 <a href="https://account.live.com/proofs/AppPassword" target="_blank" class="text-primary underline">Microsoft 账号</a> 中生成应用密码。</p>`,
+  yahoo: `<p class="font-bold text-on-surface mb-1">📧 Yahoo Mail 授权码获取步骤：</p>
+<ol class="list-decimal pl-4 space-y-1">
+<li>登录 Yahoo → 点击头像 → “账号信息”</li>
+<li>进入“账号安全” → “生成应用专用密码”</li>
+<li>应用名称选“其他应用”，输入“图片打包助手”</li>
+<li>复制密码粘贴到上方输入框</li>
+</ol>`,
+  icloud: `<p class="font-bold text-on-surface mb-1">📧 iCloud Mail 授权码获取步骤：</p>
+<ol class="list-decimal pl-4 space-y-1">
+<li>打开 <a href="https://appleid.apple.com/account/manage" target="_blank" class="text-primary underline">Apple ID 管理页面</a></li>
+<li>登录后进入“安全”部分</li>
+<li>点击“生成应用专用密码”</li>
+<li>输入标签“图片打包助手” → 创建</li>
+<li>复制密码粘贴到上方输入框</li>
+</ol>`,
+  zoho: `<p class="font-bold text-on-surface mb-1">📧 Zoho Mail：</p>
+<p class="text-emerald-700 font-semibold">✅ 无需授权码！直接输入您的登录密码即可。</p>
+<p class="mt-1 text-on-surface-variant">注意：需要先在 Zoho Mail 设置中开启 IMAP/SMTP 访问。</p>`,
+};
+
 // ===== 设置管理 =====
 
 /** 从 localStorage 加载设置 */
@@ -101,9 +151,16 @@ function loadSettings() {
     if (saved) {
       const parsed = JSON.parse(saved);
       state.settings = { ...state.settings, ...parsed };
+      els.inputProvider.value = state.settings.provider || 'gmail';
       els.inputSender.value = state.settings.senderEmail || '';
       els.inputPassword.value = state.settings.appPassword || '';
       els.inputRecipient.value = state.settings.recipientEmail || '';
+      updateProviderUI();
+    }
+    // 加载默认主题/正文
+    const defaults = localStorage.getItem('image-mailer-defaults');
+    if (defaults) {
+      state.defaults = JSON.parse(defaults);
     }
   } catch (e) {
     console.warn('加载设置失败:', e);
@@ -112,6 +169,7 @@ function loadSettings() {
 
 /** 保存设置到 localStorage */
 function saveSettings() {
+  state.settings.provider = els.inputProvider.value;
   state.settings.senderEmail = els.inputSender.value.trim();
   state.settings.appPassword = els.inputPassword.value.trim();
   state.settings.recipientEmail = els.inputRecipient.value.trim();
@@ -125,13 +183,44 @@ function isSettingsComplete() {
 
 /** 清除所有设置 */
 function clearSettings() {
-  if (!confirm('确定清除所有设置？这将删除您保存的 Gmail 地址、授权码和收件人信息。')) return;
-  state.settings = { senderEmail: '', appPassword: '', recipientEmail: '' };
+  if (!confirm('确定清除所有设置？这将删除您保存的邮箱地址、授权码和收件人信息。')) return;
+  state.settings = { provider: 'gmail', senderEmail: '', appPassword: '', recipientEmail: '' };
   localStorage.removeItem('image-mailer-settings');
+  els.inputProvider.value = 'gmail';
   els.inputSender.value = '';
   els.inputPassword.value = '';
   els.inputRecipient.value = '';
+  updateProviderUI();
   showToastMessage('设置已清除');
+}
+
+/** 更新邮箱服务商 UI（密码标签、帮助内容、占位符） */
+function updateProviderUI() {
+  const provider = els.inputProvider.value;
+  const config = PROVIDERS[provider];
+  if (!config) return;
+
+  // 更新密码标签
+  els.labelPassword.textContent = config.needsAppPassword ? '应用授权码' : '登录密码';
+  els.inputPassword.placeholder = config.placeholder;
+
+  // 更新帮助内容
+  els.authHelpContent.innerHTML = AUTH_HELP[provider] || '';
+}
+
+/** 保存默认主题/正文 */
+function saveDefaults() {
+  state.defaults.subject = els.inputSubject.value.trim();
+  state.defaults.body = els.inputBody.value.trim();
+  localStorage.setItem('image-mailer-defaults', JSON.stringify(state.defaults));
+  showToastMessage('已保存为默认内容');
+}
+
+/** 生成带日期时间的默认正文 */
+function generateDefaultBody() {
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  return state.defaults.body || `请查收附件中的图片。\n发送时间：${dateStr}`;
 }
 
 /** 切换授权码明文/密文 */
@@ -364,10 +453,19 @@ function updatePreviewUI() {
 
   // 更新默认邮件主题
   if (!els.inputSubject.value || els.inputSubject.dataset.autoFilled === 'true') {
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
-    els.inputSubject.value = `图片分享 - ${dateStr}`;
+    if (state.defaults.subject) {
+      els.inputSubject.value = state.defaults.subject;
+    } else {
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+      els.inputSubject.value = `图片分享 - ${dateStr}`;
+    }
     els.inputSubject.dataset.autoFilled = 'true';
+  }
+
+  // 更新默认邮件正文（带日期时间）
+  if (!els.inputBody.dataset.userEdited) {
+    els.inputBody.value = generateDefaultBody();
   }
 
   // 渲染图片网格
@@ -450,8 +548,9 @@ async function sendImages() {
 
   try {
     // 使用 FormData 发送二进制图片（避免 Base64 膨胀，解决 Safari 请求体限制）
-    const emailBody = els.inputBody.value.trim() || '请查收附件中的图片。';
+    const emailBody = els.inputBody.value.trim() || generateDefaultBody();
     const formData = new FormData();
+    formData.append('provider', state.settings.provider || 'gmail');
     formData.append('senderEmail', state.settings.senderEmail);
     formData.append('appPassword', state.settings.appPassword);
     formData.append('recipientEmail', state.settings.recipientEmail);
@@ -782,6 +881,17 @@ function bindEvents() {
   // 一键清除设置
   els.btnClearSettings.addEventListener('click', clearSettings);
 
+  // 邮箱类型切换
+  els.inputProvider.addEventListener('change', updateProviderUI);
+
+  // 授权码帮助折叠
+  els.btnAuthHelp.addEventListener('click', () => {
+    els.authHelpPanel.classList.toggle('hidden');
+  });
+
+  // 存为默认按钮
+  els.btnSaveDefaults.addEventListener('click', saveDefaults);
+
   // 发送历史 - 单条删除（事件委托）
   els.historyList.addEventListener('click', (e) => {
     const btn = e.target.closest('.btn-delete-history');
@@ -808,8 +918,9 @@ function bindEvents() {
     els.inputSubject.dataset.autoFilled = 'false';
   });
 
-  // 邮件正文输入时同步预览
+  // 邮件正文输入时标记为用户编辑并同步预览
   els.inputBody.addEventListener('input', () => {
+    els.inputBody.dataset.userEdited = 'true';
     els.previewBody.textContent = els.inputBody.value || '请查收附件中的图片。';
   });
 

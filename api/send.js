@@ -71,7 +71,7 @@ export default async function handler(req, res) {
   try {
     // 解析 multipart/form-data
     const { fields, files } = await parseMultipart(req);
-    const { senderEmail, appPassword, recipientEmail, subject, body } = fields;
+    const { provider, senderEmail, appPassword, recipientEmail, subject, body } = fields;
     const images = files.filter((f) => f.fieldname === 'images');
 
     // ===== 输入校验 =====
@@ -111,9 +111,21 @@ export default async function handler(req, res) {
       archive.finalize();
     });
 
-    // ===== 使用 nodemailer 通过 Gmail SMTP 发送 =====
+    // ===== 根据邮箱服务商配置 SMTP =====
+    const SMTP_CONFIGS = {
+      gmail:   { host: 'smtp.gmail.com',       port: 587, secure: false },
+      outlook: { host: 'smtp.office365.com',   port: 587, secure: false },
+      yahoo:   { host: 'smtp.mail.yahoo.com',  port: 587, secure: false },
+      icloud:  { host: 'smtp.mail.me.com',     port: 587, secure: false },
+      zoho:    { host: 'smtp.zoho.com',        port: 587, secure: false },
+    };
+
+    const smtpConfig = SMTP_CONFIGS[provider] || SMTP_CONFIGS.gmail;
+
     const transporter = nodemailer.createTransport({
-      service: 'gmail',
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
       auth: {
         user: senderEmail,
         pass: appPassword,

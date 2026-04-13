@@ -58,9 +58,25 @@
       </div>
 
       <form id="settings-form" class="space-y-6" autocomplete="off">
-        <!-- Gmail 地址 -->
+        <!-- 邮箱类型选择 -->
         <div class="space-y-2">
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-sender">您的 Gmail 地址</label>
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-provider">邮箱服务商</label>
+          <div class="relative">
+            <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">dns</span>
+            <select id="input-provider"
+              class="w-full pl-12 pr-4 py-3.5 bg-surface-container-high border-none rounded-xl focus:ring-2 focus:ring-primary/40 focus:bg-surface-container-lowest transition-all text-on-surface text-sm appearance-none cursor-pointer">
+              <option value="gmail">Gmail</option>
+              <option value="outlook">Outlook / Hotmail</option>
+              <option value="yahoo">Yahoo Mail</option>
+              <option value="icloud">iCloud Mail</option>
+              <option value="zoho">Zoho Mail</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- 发件人邮箱 -->
+        <div class="space-y-2">
+          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-sender">您的邮箱地址</label>
           <div class="relative">
             <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">mail</span>
             <input id="input-sender" type="email" placeholder="name@gmail.com"
@@ -68,9 +84,9 @@
           </div>
         </div>
 
-        <!-- 应用授权码 -->
+        <!-- 密码/授权码 -->
         <div class="space-y-2">
-          <label class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-password">Gmail 16位应用授权码</label>
+          <label id="label-password" class="block text-[11px] font-bold uppercase tracking-wider text-on-surface-variant/70 px-1" for="input-password">应用授权码</label>
           <div class="relative">
             <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-outline">key</span>
             <input id="input-password" type="password" placeholder="abcd efgh ijkl mnop"
@@ -80,10 +96,26 @@
               <span class="material-symbols-outlined text-xl">visibility</span>
             </button>
           </div>
-          <p class="text-[11px] text-primary/80 font-medium px-1 flex items-center gap-1">
-            <span class="material-symbols-outlined text-[14px]">info</span>
-            (非登录密码，在 Google 账号安全性中生成)
-          </p>
+          <!-- 授权码帮助 -->
+          <button id="btn-auth-help" type="button" class="text-[11px] text-primary/80 font-medium px-1 flex items-center gap-1 hover:text-primary transition-colors">
+            <span class="material-symbols-outlined text-[14px]">help</span>
+            <span>如何获取？点击查看详细说明</span>
+          </button>
+          <div id="auth-help-panel" class="hidden mt-2 p-4 bg-emerald-50/50 rounded-xl text-xs text-on-surface-variant leading-relaxed space-y-3 border border-emerald-100/50">
+            <div class="font-bold text-on-surface flex items-center gap-1">
+              <span class="material-symbols-outlined text-sm text-amber-500">warning</span>
+              为什么需要授权码？
+            </div>
+            <p>出于安全考虑，部分邮箱<strong>不允许第三方应用直接使用登录密码</strong>。授权码是专用密钥：</p>
+            <ul class="list-disc pl-4 space-y-1">
+              <li>只允许发邮件，<strong>不能登录</strong>你的账号</li>
+              <li>可以随时撤销，比密码更安全</li>
+              <li>只需设置一次，长期有效</li>
+            </ul>
+            <div id="auth-help-content" class="pt-2 border-t border-emerald-200/50">
+              <!-- 由 JS 根据邮箱类型动态填充 -->
+            </div>
+          </div>
         </div>
 
         <!-- 收件人邮箱 -->
@@ -193,6 +225,13 @@
             <textarea id="input-body" rows="3" placeholder="输入邮件正文内容..."
               class="w-full bg-surface-container-lowest border-0 ring-1 ring-inset ring-outline-variant/30 focus:ring-2 focus:ring-primary rounded-2xl px-4 py-3 text-sm font-medium transition-all placeholder:text-outline/50 resize-none">请查收附件中的图片。</textarea>
           </div>
+
+          <!-- 存为默认 -->
+          <button id="btn-save-defaults" type="button"
+            class="flex items-center gap-1 text-[11px] text-primary/70 font-medium hover:text-primary transition-colors ml-1">
+            <span class="material-symbols-outlined text-sm">bookmark_add</span>
+            将当前主题和正文存为默认内容
+          </button>
 
           <!-- 发送预览 -->
           <div class="bg-surface-container-low/50 rounded-2xl p-4 border border-dashed border-outline-variant/40">

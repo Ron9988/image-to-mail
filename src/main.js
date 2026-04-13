@@ -20,7 +20,7 @@ const state = {
 
 // 常量
 const MAX_IMAGES = 15;
-const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024; // 4MB安全上限（Vercel 限制 4.5MB）
+const MAX_PAYLOAD_BYTES = 4.2 * 1024 * 1024; // 4.2MB安全上限（Vercel 硬限制 4.5MB，预留 multipart 开销）
 const SENT_FP_KEY = 'image-mailer-sent-fps';
 
 // ===== DOM 元素缓存 =====

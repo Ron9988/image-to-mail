@@ -591,25 +591,7 @@ function showToast() {
 const HISTORY_KEY = 'image-mailer-history';
 const MAX_HISTORY = 50;
 
-/** 从 localStorage 加载已发送指纹 */
-function loadSentFingerprints() {
-  try {
-    const saved = localStorage.getItem(SENT_FP_KEY);
-    state.sentFingerprints = saved ? new Set(JSON.parse(saved)) : new Set();
-  } catch (e) {
-    state.sentFingerprints = new Set();
-  }
-}
 
-/** 保存已发送指纹到 localStorage */
-function saveSentFingerprints() {
-  // 只保留最近 500 条指纹，防止 localStorage 无限增长
-  const arr = Array.from(state.sentFingerprints);
-  if (arr.length > 500) {
-    state.sentFingerprints = new Set(arr.slice(-500));
-  }
-  localStorage.setItem(SENT_FP_KEY, JSON.stringify(Array.from(state.sentFingerprints)));
-}
 
 /** 从 localStorage 加载历史记录 */
 function loadHistory() {

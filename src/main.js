@@ -7,15 +7,21 @@ import './style.css';
 // ===== 全局状态 =====
 const state = {
   currentView: 'settings',   // 当前视图: settings | pack | gallery | success
-  images: [],                 // 已选图片 [{ file, name, preview, compressedData, compressedSize }]
+  images: [],                 // 已选图片 [{ file, name, preview, compressedData, compressedSize, fingerprint, lastModified }]
   settings: {
     senderEmail: '',
     appPassword: '',
     recipientEmail: '',
   },
   history: [],                // 发送历史记录
+  sentFingerprints: new Set(), // 已发送图片指纹集合
   isSending: false,           // 发送中状态
 };
+
+// 常量
+const MAX_IMAGES = 15;
+const MAX_PAYLOAD_BYTES = 4 * 1024 * 1024; // 4MB安全上限（Vercel 限制 4.5MB）
+const SENT_FP_KEY = 'image-mailer-sent-fps';
 
 // ===== DOM 元素缓存 =====
 const $ = (sel) => document.querySelector(sel);
@@ -195,7 +201,7 @@ function switchView(viewName) {
 // ===== 图片管理 =====
 
 /** 图片压缩 - 使用 Canvas 缩放 + 降低 JPEG 质量 */
-function compressImage(file, maxWidth = 1920, quality = 0.8) {
+function compressImage(file, maxWidth = 1280, quality = 0.6) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -234,19 +240,63 @@ function compressImage(file, maxWidth = 1920, quality = 0.8) {
   });
 }
 
+/** 生成图片指纹（文件名 + 大小 + 修改时间） */
+function getFileFingerprint(file) {
+  return `${file.name}|${file.size}|${file.lastModified}`;
+}
+
+/** 从 localStorage 加载已发送指纹 */
+function loadSentFingerprints() {
+  try {
+    const saved = localStorage.getItem(SENT_FP_KEY);
+    state.sentFingerprints = saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch (e) {
+    state.sentFingerprints = new Set();
+  }
+}
+
+/** 保存已发送指纹到 localStorage（最多保留 200 条） */
+function saveSentFingerprints() {
+  const arr = Array.from(state.sentFingerprints);
+  // 限制总数，保留最新的
+  if (arr.length > 200) {
+    state.sentFingerprints = new Set(arr.slice(-200));
+  }
+  localStorage.setItem(SENT_FP_KEY, JSON.stringify(Array.from(state.sentFingerprints)));
+}
+
 /** 处理图片选择事件 */
 async function handleImageSelect(event) {
   const files = Array.from(event.target.files || []);
   if (files.length === 0) return;
 
-  for (const file of files) {
-    // 跳过非图片文件
-    if (!file.type.startsWith('image/')) continue;
+  // 检查数量上限
+  const remaining = MAX_IMAGES - state.images.length;
+  if (remaining <= 0) {
+    showError(`最多只能选择 ${MAX_IMAGES} 张图片`);
+    event.target.value = '';
+    return;
+  }
+
+  // 按文件时间排序（最新的在前）
+  const sortedFiles = files
+    .filter((f) => f.type.startsWith('image/'))
+    .sort((a, b) => b.lastModified - a.lastModified);
+
+  let addedCount = 0;
+  let skippedSent = 0;
+
+  for (const file of sortedFiles) {
+    if (state.images.length >= MAX_IMAGES) {
+      break;
+    }
+
+    // 检查是否已发送过
+    const fp = getFileFingerprint(file);
+    const alreadySent = state.sentFingerprints.has(fp);
 
     try {
-      // 创建预览 URL
       const preview = URL.createObjectURL(file);
-      // 压缩图片
       const compressed = await compressImage(file);
 
       state.images.push({
@@ -255,10 +305,21 @@ async function handleImageSelect(event) {
         preview,
         compressedData: compressed.compressedData,
         compressedSize: compressed.compressedSize,
+        fingerprint: fp,
+        lastModified: file.lastModified,
+        alreadySent: alreadySent,
       });
+      addedCount++;
     } catch (err) {
       console.error('处理图片出错:', err);
     }
+  }
+
+  // 提示信息
+  const totalSelected = sortedFiles.length;
+  if (addedCount < totalSelected) {
+    const skipped = totalSelected - addedCount;
+    showError(`已添加 ${addedCount} 张，跳过 ${skipped} 张（最多 ${MAX_IMAGES} 张）`);
   }
 
   // 清空 input 以允许重复选择相同文件
@@ -294,7 +355,7 @@ function updatePreviewUI() {
   els.sendBar.classList.toggle('hidden', !hasImages || state.currentView !== 'pack');
 
   // 更新计数
-  els.previewCount.textContent = `已选择 ${count} 张图片`;
+  els.previewCount.textContent = `已选择 ${count} 张图片（上限 ${MAX_IMAGES} 张）`;
   els.previewBadge.textContent = `${count} 张图片`;
 
   // 计算总大小
@@ -322,15 +383,26 @@ function renderPreviewGrid() {
     const item = document.createElement('div');
     item.className = 'preview-item relative aspect-square overflow-hidden rounded-2xl bg-surface-container-high group';
 
+    // 已发送标记
+    const sentBadge = img.alreadySent
+      ? `<div class="absolute top-2 left-2 bg-amber-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full z-10">已发送</div>`
+      : '';
+
+    // 文件时间
+    const fileDate = new Date(img.lastModified);
+    const timeStr = `${fileDate.getMonth() + 1}/${fileDate.getDate()} ${String(fileDate.getHours()).padStart(2, '0')}:${String(fileDate.getMinutes()).padStart(2, '0')}`;
+
     item.innerHTML = `
       <img src="${img.preview}" alt="${img.name}"
-        class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+        class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110 ${img.alreadySent ? 'opacity-60' : ''}" />
+      ${sentBadge}
       <button data-index="${index}"
         class="btn-remove absolute top-2 right-2 w-7 h-7 bg-black/20 backdrop-blur-md rounded-full text-white flex items-center justify-center hover:bg-red-500 transition-colors">
         <span class="material-symbols-outlined text-sm">close</span>
       </button>
       <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/40 to-transparent p-2">
         <p class="text-white text-[10px] truncate">${img.name}</p>
+        <p class="text-white/70 text-[9px]">${timeStr}</p>
       </div>
     `;
 
@@ -362,6 +434,13 @@ async function sendImages() {
   if (!subject) {
     showError('请填写邮件主题');
     els.inputSubject.focus();
+    return;
+  }
+
+  // 发送前检查总大小
+  const totalSize = state.images.reduce((sum, img) => sum + img.compressedSize, 0);
+  if (totalSize > MAX_PAYLOAD_BYTES) {
+    showError(`图片总大小 ${formatSize(totalSize)} 超过 4MB 限制，请减少图片数量后重试`);
     return;
   }
 
@@ -446,6 +525,14 @@ function showSuccessView() {
     timestamp: Date.now(),
   });
 
+  // 记录已发送图片指纹（必须在 clearAllImages 之前）
+  state.images.forEach((img) => {
+    if (img.fingerprint) {
+      state.sentFingerprints.add(img.fingerprint);
+    }
+  });
+  saveSentFingerprints();
+
   // 填充成功页面数据
   els.successDesc.textContent = `您的 ${state.images.length} 张图片已压缩并成功发送至预设邮箱。请查收。`;
   els.successSize.textContent = formatSize(totalSize);
@@ -454,10 +541,8 @@ function showSuccessView() {
 
   // 清空已选图片
   clearAllImages();
-  // 重置邮件主题为自动填充
   els.inputSubject.dataset.autoFilled = 'true';
 
-  // 切换到成功视图
   switchView('success');
 }
 
@@ -505,6 +590,26 @@ function showToast() {
 
 const HISTORY_KEY = 'image-mailer-history';
 const MAX_HISTORY = 50;
+
+/** 从 localStorage 加载已发送指纹 */
+function loadSentFingerprints() {
+  try {
+    const saved = localStorage.getItem(SENT_FP_KEY);
+    state.sentFingerprints = saved ? new Set(JSON.parse(saved)) : new Set();
+  } catch (e) {
+    state.sentFingerprints = new Set();
+  }
+}
+
+/** 保存已发送指纹到 localStorage */
+function saveSentFingerprints() {
+  // 只保留最近 500 条指纹，防止 localStorage 无限增长
+  const arr = Array.from(state.sentFingerprints);
+  if (arr.length > 500) {
+    state.sentFingerprints = new Set(arr.slice(-500));
+  }
+  localStorage.setItem(SENT_FP_KEY, JSON.stringify(Array.from(state.sentFingerprints)));
+}
 
 /** 从 localStorage 加载历史记录 */
 function loadHistory() {
@@ -741,6 +846,9 @@ function init() {
 
   // 加载发送历史
   loadHistory();
+
+  // 加载已发送指纹
+  loadSentFingerprints();
 
   // 绑定事件
   bindEvents();
